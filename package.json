@@ -1,0 +1,15 @@
+{
+  "name": "eleventy-plugin-embedded-demos",
+  "version": "1.0.0",
+  "description": "",
+  "main": ".eleventy.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Luke Bonaccorsi",
+  "license": "MIT",
+  "dependencies": {
+    "prettier": "^2.8.3",
+    "prismjs": "^1.29.0"
+  }
+}
