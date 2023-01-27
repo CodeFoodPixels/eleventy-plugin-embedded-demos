@@ -11,24 +11,39 @@ const prettier = require("prettier");
 const fs = require("fs");
 
 const defaults = {
-  demoPath: path.join(".", "demos"),
+  path: path.join(".", "demos"),
+  parsers: {
+    html: "html",
+    css: "css",
+    javascript: "babel",
+  },
+  displayNames: {
+    html: "HTML",
+    css: "CSS",
+    javascript: "JavaScript",
+    result: "Result",
+  },
+  filenames: {
+    html: "index.*",
+    css: "styles.css",
+    javascript: "main.js",
+  },
+  prettier: true,
 };
 
-const parsers = {
-  html: "html",
-  css: "css",
-  javascript: "babel"
-};
+function deepMerge(base, overrides) {
+  const returnObj = {};
+  Object.keys(base).forEach((key) => {
+    if (typeof base[key] === "object" && overrides[key]) {
+      return (returnObj[key] = deepMerge(base[key], overrides[key]));
+    } else if (overrides[key]) {
+      return (returnObj[key] = overrides[key]);
+    }
 
-const displayNames = {
-  html: "HTML",
-  css: "CSS",
-  javascript: "JavaScript"
-};
+    returnObj[key] = base[key];
+  });
 
-const filenames = {
-  css: "styles.css",
-  javascript: "main.js"
+  return returnObj;
 }
 
 function stripTrailingSlashes(str) {
@@ -37,91 +52,112 @@ function stripTrailingSlashes(str) {
   return str.slice(0, end + 1);
 }
 
-function generateCodeBlock(code, language) {
-  const formatted = prettier.format(code, {parser: parsers[language]});
-  const highlighted = Prism.highlight(
-      formatted,
-      Prism.languages[language],language
-    )
-  return `<pre class="language-${language}"><code class="language-${language}">${highlighted}</code></pre>`
-}
-
-function generateDetailsBlocks(files) {
-  return files.map(({ code, language }) => {
-    return `<details class="demo__code">
-    <summary class="demo__code-toggle">${displayNames[language]}</summary>
-    ${generateCodeBlock(code, language)}
-  </details>`
-  }).join("");
-   
-}
-
-function demoFileExists(demoPath) {
+function demoFileExists(path) {
   try {
-    fs.accessSync(demoPath);
+    fs.accessSync(path);
     return true;
   } catch (e) {
     return false;
   }
 }
 
-module.exports = function demo(
-  eleventyConfig,
-  { demoPath = defaults.demoPath }
-) {
-  demoPath = stripTrailingSlashes(demoPath);
+module.exports = function demo(eleventyConfig, userOptions = {}) {
+  const options = deepMerge(defaults, userOptions);
+  options.path = stripTrailingSlashes(options.path);
+  const demos = [];
+  eleventyConfig.addCollection("demos", (collectionApi) => {
+    const filtered = collectionApi.getFilteredByGlob(
+      `${options.path}/**/${options.filenames.html}`
+    );
 
-  eleventyConfig.addCollection("demos", (collectionApi) =>
-    collectionApi.getFilteredByGlob(`${demoPath}/**/index.*`)
-  );
+    demos.push(...filtered);
+
+    return filtered;
+  });
 
   [
-    {name: "demoCss", language: "css", tag: "style" },
-    {name: "demoJS", language: "javascript", tag: "script"}
-  ].forEach(({name, language, tag}) => {
-eleventyConfig.addShortcode(name, function() {
-    const pagePath = path.dirname(path.resolve(this.page.inputPath));
-    const filepath = path.join(pagePath, filenames[language]);
-    if (demoFileExists(filepath)){
-      try {
-        return `<${tag}>${fs.readFileSync(filepath, "utf-8")}</${tag}>`;
-      } catch (e) {
-        throw new Error(`Problem trying to load demo file "${filepath}": ${e}`)
+    { name: "demoCss", language: "css", tag: "style" },
+    { name: "demoJS", language: "javascript", tag: "script" },
+  ].forEach(({ name, language, tag }) => {
+    eleventyConfig.addShortcode(name, function () {
+      const pagePath = path.dirname(path.resolve(this.page.inputPath));
+      const page = demos.find(
+        (page) => path.dirname(path.resolve(page.inputPath)) === pagePath
+      );
+      const filename =
+        page.data?.filenames?.[language] || options.filenames[language];
+      const filepath = path.join(pagePath, filename);
+      if (demoFileExists(filepath)) {
+        try {
+          return `<${tag}>${fs.readFileSync(filepath, "utf-8")}</${tag}>`;
+        } catch (e) {
+          throw new Error(
+            `Problem trying to load demo file "${filepath}": ${e}`
+          );
+        }
       }
-    }
-    return "";
-  })
+      return "";
+    });
   });
-  
 
-  eleventyConfig.addShortcode("demo", function (demoName) {
+  eleventyConfig.addShortcode("embeddedDemo", function (demoName) {
+    if (!demoName) {
+      throw new Error("No demo name passed");
+    }
+
     const searchPath = stripTrailingSlashes(
-      path.join(path.resolve("."), demoPath, demoName)
+      path.join(path.resolve("."), options.path, demoName)
     );
-    const page = this.ctx.collections.demos.find(
+
+    const page = demos.find(
       (page) => path.dirname(path.resolve(page.inputPath)) === searchPath
     );
 
     const files = [];
-    files.push({ code: page.templateContent, language: "html"});
+    files.push({ code: page.templateContent, language: "html" });
+
     ["css", "javascript"].forEach((language) => {
-      const filepath = path.join(searchPath, filenames[language]);
-      if (demoFileExists(filepath)){
+      const filename =
+        page.data?.filenames?.[language] || options.filenames[language];
+      const filepath = path.join(searchPath, filename);
+      if (demoFileExists(filepath)) {
         try {
-          files.push({code: fs.readFileSync(filepath, "utf-8"), language});
+          files.push({ code: fs.readFileSync(filepath, "utf-8"), language });
         } catch (e) {
-          throw new Error(`Problem trying to load demo file "${filepath}": ${e}`)
+          throw new Error(
+            `Problem trying to load demo file "${filepath}": ${e}`
+          );
         }
       }
-    })
-    
+    });
 
-    return `<div class="demo-container">
-  ${generateDetailsBlocks(files)}
-  <details class="demo__result" open>
-    <summary class="demo__result-toggle">Result</summary>
-    <iframe src="/demo/${demoName}" title="${page.data.title}" loading="lazy" class="demo-container__iframe"></iframe>
+    const blocks = files.map(({ code, language }) => {
+      const highlighted = Prism.highlight(
+        options.prettier
+          ? prettier.format(code, { parser: options.parsers[language] })
+          : code,
+        Prism.languages[language],
+        language
+      );
+
+      return `<details class="eleventy-plugin-embedded-demo__code">
+  <summary class="eleventy-plugin-embedded-demo__code-toggle">${options.displayNames[language]}</summary>
+  <pre class="language-${language}"><code class="language-${language}">${highlighted}</code></pre>
+</details>`;
+    });
+
+    return `<div class="eleventy-plugin-embedded-demo__container">
+  ${blocks.join("")}
+  <details class="eleventy-plugin-embedded-demo__result" open>
+    <summary class="eleventy-plugin-embedded-demo__result-toggle">${
+      options.displayNames.result
+    }</summary>
+    <iframe src="${
+      page.url
+    }" title="${page.data.title}" loading="lazy" class="eleventy-plugin-embedded-demo__result-iframe"></iframe>
   </details>
-</div>`
+</div>`;
   });
 };
+
+module.exports.defaults = defaults;
