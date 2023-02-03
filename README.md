@@ -220,6 +220,28 @@ An object keyed by file type with the file name to look for.
 <td>An object keyed by section with the text to be displayed with the corresponding section in the embedded demo</td>
 </tr>
 
+<tr>
+<td>
+
+`open`
+
+</td>
+<td>object</td>
+<td>
+
+```
+{
+  html: false,
+  css: false,
+  javascript: false,
+  result: true,
+}
+```
+
+</td>
+<td>An object keyed by section with a true or false value for if that section should be open</td>
+</tr>
+
 </table>
 
 ### Defaults

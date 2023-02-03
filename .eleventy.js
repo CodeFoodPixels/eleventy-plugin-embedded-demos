@@ -28,15 +28,21 @@ const defaults = {
     css: "styles.css",
     javascript: "main.js",
   },
+  open: {
+    html: false,
+    css: false,
+    javascript: false,
+    result: true,
+  },
   prettier: true,
 };
 
 function deepMerge(base, overrides) {
   const returnObj = {};
   Object.keys(base).forEach((key) => {
-    if (typeof base[key] === "object" && overrides[key]) {
+    if (typeof base[key] === "object" && overrides[key] !== undefined) {
       return (returnObj[key] = deepMerge(base[key], overrides[key]));
-    } else if (overrides[key]) {
+    } else if (overrides[key] !== undefined) {
       return (returnObj[key] = overrides[key]);
     }
 
@@ -65,6 +71,9 @@ module.exports = function demo(eleventyConfig, userOptions = {}) {
   const options = deepMerge(defaults, userOptions);
   options.path = stripTrailingSlashes(options.path);
   const demos = [];
+
+  eleventyConfig.addWatchTarget(`${options.path}/**/*`);
+
   eleventyConfig.addCollection("demos", (collectionApi) => {
     const filtered = collectionApi.getFilteredByGlob(
       `${options.path}/**/${options.filenames.html}`
@@ -140,15 +149,25 @@ module.exports = function demo(eleventyConfig, userOptions = {}) {
         language
       );
 
-      return `<details class="eleventy-plugin-embedded-demo__code">
-  <summary class="eleventy-plugin-embedded-demo__code-toggle">${options.displayNames[language]}</summary>
-  <pre class="language-${language}"><code class="language-${language}">${highlighted}</code></pre>
+      const lines = highlighted.split("\n").slice(0, -1);
+
+      return `<details class="eleventy-plugin-embedded-demo__code" ${
+        options.open[language] && "open"
+      }>
+  <summary class="eleventy-plugin-embedded-demo__code-toggle">${
+    options.displayNames[language]
+  }</summary>
+  <pre class="language-${language}"><code class="language-${language}">${lines.join(
+        "<br>"
+      )}</code></pre>
 </details>`;
     });
 
     return `<div class="eleventy-plugin-embedded-demo__container">
   ${blocks.join("")}
-  <details class="eleventy-plugin-embedded-demo__result" open>
+  <details class="eleventy-plugin-embedded-demo__result" ${
+    options.open.result && "open"
+  }>
     <summary class="eleventy-plugin-embedded-demo__result-toggle">${
       options.displayNames.result
     }</summary>
